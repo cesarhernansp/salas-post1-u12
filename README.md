@@ -123,3 +123,48 @@ Un algoritmo clásico determinista necesita, en el peor caso, 2ⁿ⁻¹ + 1 eval
 **Checkpoint 2.** `deutsch_jozsa.py` ejecuta correctamente para ambos oráculos: el constante produce únicamente |00⟩ y el balanceado nunca produce |00⟩.
 
 ![Histogramas de Deutsch-Jozsa](capturas/deutsch_jozsa.png)
+
+## Paso 3 — Algoritmo de Grover con 2 qubits (`src/grover.py`)
+
+Grover busca el elemento marcado en una base de datos no estructurada con aceleración cuadrática. Con n = 2 qubits el espacio tiene N = 4 elementos. El circuito de una iteración es:
+
+1. **Superposición uniforme:** `H` en los dos qubits; los cuatro estados quedan con amplitud 1/2.
+2. **Oráculo de fase:** invierte el signo (fase −1) del estado marcado. Para |11⟩ basta una `CZ`; para otro objetivo se rodea la `CZ` con puertas `X` sobre los qubits cuyo bit objetivo es 0.
+3. **Difusor** (inversión alrededor de la media): `H`, `X`, `CZ`, `X`, `H` en los dos qubits.
+
+```
+     ┌───┐   ┌───┐┌───┐   ┌───┐┌───┐┌─┐
+q_0: ┤ H ├─■─┤ H ├┤ X ├─■─┤ X ├┤ H ├┤M├───      (objetivo |11>)
+     ├───┤ │ ├───┤├───┤ │ ├───┤├───┤└╥┘┌─┐
+q_1: ┤ H ├─■─┤ H ├┤ X ├─■─┤ X ├┤ H ├─╫─┤M├
+     └───┘   └───┘└───┘   └───┘└───┘ ║ └╥┘
+c: 2/════════════════════════════════╩══╩═
+                                     0  1
+```
+
+**Corrección respecto a la guía.** El oráculo de la guía para `target="01"` aplica `X` al qubit 0 y el de `"10"` aplica `X` al qubit 1. Qiskit escribe las cadenas con el qubit 0 a la **derecha** (`"q1q0"`), de modo que esas dos ramas marcan el estado contrario. Se comprobó ejecutando el código de la guía tal como está: para `"01"` el estado más probable fue `10` (1024 de 1024) y para `"10"` fue `01`, es decir, el programa habría respondido `ERROR` en esos dos objetivos. `grover.py` calcula las puertas `X` a partir de `target[-1 - i]` (el bit del qubit i), con lo que los cuatro objetivos funcionan.
+
+### Resultados (1024 shots, simulador ideal)
+
+| Objetivo | Estado más probable | Cuentas del objetivo | Probabilidad | Resultado |
+|---|---|---|---|---|
+| \|00⟩ | \|00⟩ | 1024 | 100.0 % | CORRECTO |
+| \|01⟩ | \|01⟩ | 1024 | 100.0 % | CORRECTO |
+| \|10⟩ | \|10⟩ | 1024 | 100.0 % | CORRECTO |
+| \|11⟩ | \|11⟩ | 1024 | 100.0 % | CORRECTO |
+
+En los cuatro casos el estado marcado aparece con probabilidad **100 %**, por encima del 90 % que pide la guía.
+
+### Por qué una iteración basta para n = 2
+
+Tras la superposición uniforme, las cuatro amplitudes valen 1/2. El oráculo cambia el signo de la del estado marcado: 1/2, 1/2, 1/2 y −1/2. La media de las amplitudes es (3 · 1/2 − 1/2)/4 = 1/4, y el difusor refleja cada amplitud respecto de esa media (a → 2 · 1/4 − a): las tres no marcadas quedan en 2 · 1/4 − 1/2 = **0** y la marcada en 2 · 1/4 − (−1/2) = **1**. Toda la probabilidad se concentra en el estado objetivo tras una sola iteración.
+
+Geométricamente, el estado inicial forma con el subespacio de los estados no marcados un ángulo θ con sen θ = 1/√N = 1/2, es decir θ = 30°; cada iteración de Grover rota el estado 2θ hacia el objetivo, así que tras k iteraciones el ángulo es (2k + 1)θ. Con k = 1 el ángulo es 3θ = 90° y la probabilidad de acertar es sen²(90°) = 1. El número óptimo de iteraciones, ≈ (π/4)√N − 1/2 = 1.07, se redondea a 1. Con N = 4 el resultado es exacto; con más iteraciones el estado "pasaría de largo" y la probabilidad bajaría.
+
+**Checkpoint 3.** `grover.py` encuentra correctamente el estado objetivo para los cuatro objetivos con probabilidad mayor al 90 %. Los cuatro histogramas están en `capturas/`.
+
+| \|00⟩ | \|01⟩ |
+|---|---|
+| ![Grover 00](capturas/grover_00.png) | ![Grover 01](capturas/grover_01.png) |
+| **\|10⟩** | **\|11⟩** |
+| ![Grover 10](capturas/grover_10.png) | ![Grover 11](capturas/grover_11.png) |
