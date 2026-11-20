@@ -51,3 +51,62 @@ Un adversario puede interceptar hoy comunicaciones cifradas con RSA, ECDH o X255
 El tamaño de la máquina necesaria baja con el tiempo. Gidney y Ekerå (2021) estimaron que factorizar un entero RSA de 2048 bits requería unos 20 millones de qubits ruidosos y unas 8 horas; Gidney (2025) lo redujo a menos de un millón de qubits ruidosos y menos de una semana, con una tasa de error de puerta de 0,1 %, un ciclo del código de superficie de 1 µs y un tiempo de reacción del control de 10 µs. Ninguna de las dos máquinas existe hoy; lo relevante es la tendencia, que acorta el plazo de seguridad de los datos con horizonte largo.
 
 **Checkpoint 1.** El inventario incluye ocho algoritmos clasificados, distingue los vulnerables a Shor (asimétricos) de los vulnerables a Grover (simétricos y hash), indica la acción de remediación y diferencia "roto completamente" (compromiso retroactivo de la confidencialidad) de "debilitado".
+
+## 2. Estándares NIST de criptografía post-cuántica (agosto de 2024)
+
+El NIST publicó el 13 de agosto de 2024 los tres primeros estándares de criptografía post-cuántica: FIPS 203 (ML-KEM), FIPS 204 (ML-DSA) y FIPS 205 (SLH-DSA) (NIST, 2024a, 2024b, 2024c). Los tres resisten, según el estado actual del conocimiento, a adversarios con computadores cuánticos. Los tamaños de las tablas siguientes se transcribieron de las tablas oficiales de cada estándar.
+
+### 2.1 ML-KEM (FIPS 203): encapsulamiento de claves
+
+ML-KEM es un mecanismo de encapsulamiento de claves (KEM): permite que dos partes establezcan un secreto compartido sobre un canal público, que luego se usa con cifrado simétrico. Deriva de CRYSTALS-KYBER y su seguridad se relaciona con la dificultad del problema *Module Learning with Errors* (MLWE) (NIST, 2024a). Define tres conjuntos de parámetros, en orden creciente de seguridad y decreciente de rendimiento:
+
+| Conjunto | Categoría NIST (equivalente simétrico) | Clave pública (encapsulación) | Clave privada (desencapsulación) | Ciphertext | Secreto compartido |
+|---|---|---|---|---|---|
+| ML-KEM-512 | 1 (AES-128) | 800 bytes | 1632 bytes | 768 bytes | 32 bytes |
+| ML-KEM-768 | 3 (AES-192) | 1184 bytes | 2400 bytes | 1088 bytes | 32 bytes |
+| ML-KEM-1024 | 5 (AES-256) | 1568 bytes | 3168 bytes | 1568 bytes | 32 bytes |
+
+Fuente: Tablas 2 y 3 de NIST (2024a); las categorías se explican en NIST (2024a) y NIST (2026). **El NIST recomienda ML-KEM-768 como conjunto de parámetros por defecto**, porque ofrece un amplio margen de seguridad con un costo de rendimiento razonable; los otros dos se reservan para casos en que se requiera más seguridad o menos tamaño (NIST, 2024a). ML-KEM **reemplaza a ECDH, X25519 y a RSA como mecanismo de intercambio o transporte de claves**.
+
+### 2.2 ML-DSA (FIPS 204): firma digital basada en retículos
+
+ML-DSA es un algoritmo de firma digital basado en retículos (*lattices*), derivado de CRYSTALS-Dilithium (NIST, 2024b). Define tres conjuntos de parámetros:
+
+| Conjunto | Categoría NIST | Clave privada | Clave pública | Firma |
+|---|---|---|---|---|
+| ML-DSA-44 | 2 | 2560 bytes | 1312 bytes | 2420 bytes |
+| ML-DSA-65 | 3 | 4032 bytes | 1952 bytes | 3309 bytes |
+| ML-DSA-87 | 5 | 4896 bytes | 2592 bytes | 4627 bytes |
+
+Fuente: Tablas 1 y 2 de NIST (2024b).
+
+**Comparación con ECDSA-256.** ECDSA sobre P-256 tiene una clave pública de 64 bytes, una privada de 32 y una firma de unos 72 bytes en codificación DER (64 bytes sin formato). Frente a esas cifras, la firma de ML-DSA-44 es unas 34 veces mayor (2420/72), la de ML-DSA-65 unas 46 veces (3309/72) y la de ML-DSA-87 unas 64 veces (4627/72); la clave pública crece de 20 a 40 veces (1312/64 a 2592/64). La guía pide comparar también la velocidad de verificación. Los FIPS no publican tiempos de ejecución, que dependen de la implementación y del hardware, y este análisis no cita cifras de tiempo que no pudo verificar en una fuente primaria; la comparación se hace en bytes, que sí es una magnitud verificable.
+
+### 2.3 SLH-DSA (FIPS 205): firma digital basada solo en hash
+
+SLH-DSA es un esquema de firma *stateless* basado únicamente en funciones hash, derivado de SPHINCS+ (NIST, 2024c). Define 12 conjuntos de parámetros: seis combinaciones de tamaño de seguridad (128, 192 y 256 bits) y variante (`s`, firmas pequeñas, o `f`, generación rápida de firmas), cada una instanciable con SHA-2 o con SHAKE. La clave pública ocupa 2n bytes y la privada 4n bytes (n = 16, 24 o 32 bytes), y cada par de claves puede firmar como máximo 2⁶⁴ mensajes.
+
+| Conjunto (SHA2 o SHAKE) | Categoría NIST | Clave pública | Firma |
+|---|---|---|---|
+| SLH-DSA-128s | 1 | 32 bytes | 7856 bytes |
+| SLH-DSA-128f | 1 | 32 bytes | 17 088 bytes |
+| SLH-DSA-192s | 3 | 48 bytes | 16 224 bytes |
+| SLH-DSA-192f | 3 | 48 bytes | 35 664 bytes |
+| SLH-DSA-256s | 5 | 64 bytes | 29 792 bytes |
+| SLH-DSA-256f | 5 | 64 bytes | 49 856 bytes |
+
+Fuente: Tabla 2 de NIST (2024c). La clave privada del conjunto de 128 bits ocupa 64 bytes y la pública 32.
+
+**Por qué es más conservador que ML-DSA.** La seguridad de SLH-DSA depende únicamente de las propiedades de las funciones hash con que se instancia, que llevan décadas de estudio, y no asume la dificultad de un problema algebraico estructurado como MLWE, cuya seguridad a largo plazo frente a futuros avances de criptoanálisis ha tenido menos años de escrutinio. El precio es el tamaño: la firma de SLH-DSA-128s (7856 bytes) es 2,4 veces mayor que la de ML-DSA-65 (3309 bytes), y las variantes rápidas (`f`) tienen firmas aún mayores, hasta 49 856 bytes. Por eso se recomienda como **alternativa de respaldo** y diversificación, no como algoritmo principal.
+
+### 2.4 Qué reemplaza a qué
+
+| Función | Algoritmo clásico (vulnerable a Shor) | Reemplazo post-cuántico | Estándar |
+|---|---|---|---|
+| Intercambio o encapsulamiento de claves | ECDH, X25519, DH, RSA | **ML-KEM** (768 por defecto) | FIPS 203 |
+| Firma digital de uso general | ECDSA, EdDSA, RSA | **ML-DSA** (65 como punto de partida habitual) | FIPS 204 |
+| Firma digital de respaldo o de larga vida | ECDSA, RSA | **SLH-DSA** | FIPS 205 |
+
+ML-KEM **no es un esquema de firma**: solo establece claves. ML-DSA y SLH-DSA son esquemas de firma y no sirven para intercambiar claves. El NIST IR 8547 enumera estos estándares como destino de la transición de los algoritmos del Paso 1 (NIST, 2026).
+
+**Checkpoint 2.** La sección incluye tablas comparativas con el tamaño en bytes de la clave pública, la clave privada, el ciphertext o la firma de los tres estándares, con fuente citada, y explica que ML-KEM reemplaza a ECDH y RSA para el intercambio de claves mientras que ML-DSA y SLH-DSA reemplazan a ECDSA y RSA para las firmas.
