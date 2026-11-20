@@ -79,3 +79,47 @@ Antes de medir, los dos qubits están en una superposición de |00⟩ y |11⟩ q
 **Checkpoint 1.** `bell_state.py` ejecuta sin errores y los conteos muestran solo |00⟩ y |11⟩ con distribución aproximada 50/50.
 
 ![Histograma del estado de Bell](capturas/bell_histogram.png)
+
+## Paso 2 — Algoritmo de Deutsch-Jozsa (`src/deutsch_jozsa.py`)
+
+Deutsch-Jozsa decide si una función `f: {0,1}ⁿ → {0,1}` es **constante** (el mismo valor para todas las entradas) o **balanceada** (0 en exactamente la mitad de las entradas y 1 en la otra mitad) con una sola evaluación del oráculo. El circuito, para n = 2 qubits de entrada y un qubit auxiliar (ancilla), es:
+
+1. Inicializar el ancilla en |−⟩ (`X` y luego `H`) y poner los n qubits de entrada en superposición uniforme (`H`).
+2. Aplicar el oráculo **una sola vez**.
+3. Aplicar `H` a los n qubits de entrada (interferencia) y medirlos; el ancilla no se mide.
+
+Los oráculos de n = 2 son: el **constante** f(x) = 0 (no hace nada) y el **balanceado** f(x) = x₀ ⊕ x₁ (una CNOT de cada qubit de entrada al ancilla). Circuito completo con el oráculo balanceado:
+
+```
+     ┌───┐          ┌───┐     ┌─┐
+q_0: ┤ H ├───────■──┤ H ├─────┤M├───
+     ├───┤       │  └───┘┌───┐└╥┘┌─┐
+q_1: ┤ H ├───────┼────■──┤ H ├─╫─┤M├
+     ├───┤┌───┐┌─┴─┐┌─┴─┐└───┘ ║ └╥┘
+q_2: ┤ X ├┤ H ├┤ X ├┤ X ├──────╫──╫─
+     └───┘└───┘└───┘└───┘      ║  ║
+c: 2/══════════════════════════╩══╩═
+                               0  1
+```
+
+### Resultados (1024 shots)
+
+| Oráculo | Conteos | Interpretación del programa |
+|---|---|---|
+| Constante f(x) = 0 | `{'00': 1024}` | constante |
+| Balanceado f(x) = x₀ ⊕ x₁ | `{'11': 1024}` | balanceada |
+| Constante f(x) = 1 (adicional) | `{'00': 1024}` | constante |
+| Balanceado f(x) = x₀ (adicional) | `{'01': 1024}` | balanceada |
+| Balanceado f(x) = x₁ (adicional) | `{'10': 1024}` | balanceada |
+
+El oráculo constante produce únicamente |00⟩ y el balanceado nunca lo produce (`assert` incluidos), con una distribución totalmente determinista: 1024 de 1024. En Qiskit el bit más a la derecha de la cadena es el qubit 0, por eso f(x) = x₀ da `01` y f(x) = x₁ da `10`.
+
+### Por qué basta una evaluación del oráculo
+
+Con el ancilla en |−⟩, una llamada al oráculo no cambia el ancilla sino que **imprime la fase** (−1)^f(x) sobre cada estado de entrada |x⟩ (*phase kickback*). Tras la segunda ronda de Hadamard, la amplitud del estado |00⟩ es (1/2ⁿ) Σₓ (−1)^f(x): vale ±1 si f es constante (todos los términos tienen el mismo signo) y vale 0 si f es balanceada (la mitad de los términos son +1 y la otra mitad −1, y se cancelan por interferencia destructiva). Por eso medir |00⟩ con probabilidad 1 indica "constante" y cualquier otro resultado indica "balanceada", sin ambigüedad.
+
+Un algoritmo clásico determinista necesita, en el peor caso, 2ⁿ⁻¹ + 1 evaluaciones: para n = 2 son **3**, porque dos evaluaciones iguales no bastan (una función balanceada también puede dar el mismo valor en dos entradas) y hace falta una tercera. El circuito cuántico usa **1**. La ventaja crece exponencialmente con n: para n = 30 la versión clásica necesita 2²⁹ + 1 ≈ 5.4 × 10⁸ evaluaciones y la cuántica sigue necesitando una.
+
+**Checkpoint 2.** `deutsch_jozsa.py` ejecuta correctamente para ambos oráculos: el constante produce únicamente |00⟩ y el balanceado nunca produce |00⟩.
+
+![Histogramas de Deutsch-Jozsa](capturas/deutsch_jozsa.png)
