@@ -31,18 +31,18 @@ El primer paso de cualquier migración post-cuántica es un inventario completo 
 | ECDSA (P-256, P-384) | Firma digital | **Roto completamente** | Shor (logaritmo discreto en curvas elípticas) | Reemplazar por ML-DSA (o SLH-DSA como respaldo) |
 | ECDH / X25519 | Intercambio de clave | **Roto completamente** | Shor (logaritmo discreto en curvas elípticas) | Reemplazar por ML-KEM; en transición, usar el modo híbrido X25519+ML-KEM-768 |
 | DH de campo finito | Intercambio de clave | **Roto completamente** | Shor (logaritmo discreto) | Reemplazar por ML-KEM |
-| AES-128 | Cifrado simétrico | **Debilitado**: clave efectiva de 64 bits frente a Grover | Grover, O(√N) | Migrar a AES-256; el NIST lo mantiene en la categoría de seguridad 1 (NIST, 2026) |
+| AES-128 | Cifrado simétrico | **Debilitado**: clave efectiva de 64 bits frente a Grover | Grover, O(√N) | Migrar a AES-256; el NIST lo mantiene en la categoría de seguridad 1 (Moody et al., 2026) |
 | AES-256 | Cifrado simétrico | **Aceptable**: clave efectiva de 128 bits | Grover, O(√N) | Mantener |
 | SHA-256 | Función hash | **Debilitada** en preimagen (de 2²⁵⁶ a 2¹²⁸ con Grover); la búsqueda de colisiones en un hash de 256 bits es la referencia de la categoría 2 del NIST | Grover | Mantener con precaución; para nuevos sistemas, SHA-384 o SHA-512 |
 | SHA-3-256 | Función hash | **Debilitada**, equivalente a SHA-256 | Grover | Usar SHA3-384 o superior |
 
 La clasificación distingue dos grados. "**Roto completamente**" significa que un CRQC permite recuperar claves privadas y, por tanto, **descifrar de forma retroactiva** el tráfico que se capturó con anterioridad y falsificar firmas. "**Debilitado**" significa que la seguridad efectiva baja, pero sigue siendo suficiente con parámetros mayores: duplicar la longitud de la clave simétrica devuelve el nivel de seguridad original.
 
-El NIST usa cinco categorías de seguridad definidas por la dificultad de ataques de referencia: la categoría 1 equivale a la búsqueda de una clave de un cifrador de bloque de 128 bits (AES-128), la 2 a una búsqueda de colisiones en una función hash de 256 bits (SHA-256), la 3 a una clave de 192 bits (AES-192), la 4 a colisiones en un hash de 384 bits (SHA3-384) y la 5 a una clave de 256 bits (AES-256) (NIST, 2026). Estas categorías son la escala que se usa más adelante para comparar ML-KEM, ML-DSA y SLH-DSA.
+El NIST usa cinco categorías de seguridad definidas por la dificultad de ataques de referencia: la categoría 1 equivale a la búsqueda de una clave de un cifrador de bloque de 128 bits (AES-128), la 2 a una búsqueda de colisiones en una función hash de 256 bits (SHA-256), la 3 a una clave de 192 bits (AES-192), la 4 a colisiones en un hash de 384 bits (SHA3-384) y la 5 a una clave de 256 bits (AES-256) (Moody et al., 2026). Estas categorías son la escala que se usa más adelante para comparar ML-KEM, ML-DSA y SLH-DSA.
 
 ### 1.2 Plazos del NIST para los algoritmos de clave pública
 
-El NIST IR 8547, en su versión final de octubre de 2026, fija el calendario de abandono de los algoritmos cuánticamente vulnerables (NIST, 2026): **RSA, ECDSA, EdDSA y los esquemas de intercambio de clave Diffie-Hellman (DH y ECDH) quedan en desuso ("deprecated") después de 2030 y prohibidos ("disallowed") después de 2035** en los estándares y guías del NIST. La ventana de 2030 a 2035 atiende los sistemas de menor riesgo con restricciones heredadas; no altera los plazos anteriores para los activos de alto valor del gobierno federal de Estados Unidos, que según la Orden Ejecutiva 14412 y el memorando OMB M-26-15 deben adoptar criptografía post-cuántica para el establecimiento de claves antes del 31 de diciembre de 2030 y para las firmas digitales antes del 31 de diciembre de 2031 (NIST, 2026). El memorando NSM-10 ya había fijado 2035 como objetivo para completar la migración federal.
+El NIST IR 8547, en su versión final de octubre de 2026, fija el calendario de abandono de los algoritmos cuánticamente vulnerables (Moody et al., 2026): **RSA, ECDSA, EdDSA y los esquemas de intercambio de clave Diffie-Hellman (DH y ECDH) quedan en desuso ("deprecated") después de 2030 y prohibidos ("disallowed") después de 2035** en los estándares y guías del NIST. La ventana de 2030 a 2035 atiende los sistemas de menor riesgo con restricciones heredadas; no altera los plazos anteriores para los activos de alto valor del gobierno federal de Estados Unidos, que según la Orden Ejecutiva 14412 y el memorando OMB M-26-15 deben adoptar criptografía post-cuántica para el establecimiento de claves antes del 31 de diciembre de 2030 y para las firmas digitales antes del 31 de diciembre de 2031 (Moody et al., 2026). El memorando NSM-10 ya había fijado 2035 como objetivo para completar la migración federal.
 
 ### 1.3 Por qué la amenaza es de "recolectar ahora, descifrar después"
 
@@ -66,7 +66,7 @@ ML-KEM es un mecanismo de encapsulamiento de claves (KEM): permite que dos parte
 | ML-KEM-768 | 3 (AES-192) | 1184 bytes | 2400 bytes | 1088 bytes | 32 bytes |
 | ML-KEM-1024 | 5 (AES-256) | 1568 bytes | 3168 bytes | 1568 bytes | 32 bytes |
 
-Fuente: Tablas 2 y 3 de NIST (2024a); las categorías se explican en NIST (2024a) y NIST (2026). **El NIST recomienda ML-KEM-768 como conjunto de parámetros por defecto**, porque ofrece un amplio margen de seguridad con un costo de rendimiento razonable; los otros dos se reservan para casos en que se requiera más seguridad o menos tamaño (NIST, 2024a). ML-KEM **reemplaza a ECDH, X25519 y a RSA como mecanismo de intercambio o transporte de claves**.
+Fuente: Tablas 2 y 3 de NIST (2024a); las categorías se explican en NIST (2024a) y Moody et al. (2026). **El NIST recomienda ML-KEM-768 como conjunto de parámetros por defecto**, porque ofrece un amplio margen de seguridad con un costo de rendimiento razonable; los otros dos se reservan para casos en que se requiera más seguridad o menos tamaño (NIST, 2024a). ML-KEM **reemplaza a ECDH, X25519 y a RSA como mecanismo de intercambio o transporte de claves**.
 
 ### 2.2 ML-DSA (FIPS 204): firma digital basada en retículos
 
@@ -107,13 +107,13 @@ Fuente: Tabla 2 de NIST (2024c). La clave privada del conjunto de 128 bits ocupa
 | Firma digital de uso general | ECDSA, EdDSA, RSA | **ML-DSA** (ML-DSA-65, categoría 3, en este análisis) | FIPS 204 |
 | Firma digital de respaldo o de larga vida | ECDSA, RSA | **SLH-DSA** | FIPS 205 |
 
-ML-KEM **no es un esquema de firma**: solo establece claves. ML-DSA y SLH-DSA son esquemas de firma y no sirven para intercambiar claves. El NIST IR 8547 enumera estos estándares como destino de la transición de los algoritmos del Paso 1 (NIST, 2026).
+ML-KEM **no es un esquema de firma**: solo establece claves. ML-DSA y SLH-DSA son esquemas de firma y no sirven para intercambiar claves. El NIST IR 8547 enumera estos estándares como destino de la transición de los algoritmos del Paso 1 (Moody et al., 2026).
 
 **Checkpoint 2.** La sección incluye tablas comparativas con el tamaño en bytes de la clave pública, la clave privada, el ciphertext o la firma de los tres estándares, con fuente citada, y explica que ML-KEM reemplaza a ECDH y RSA para el intercambio de claves mientras que ML-DSA y SLH-DSA reemplazan a ECDSA y RSA para las firmas.
 
 ## 3. Plan de migración para tres perfiles organizacionales
 
-La prioridad de migración de cada organización la determina el **horizonte de sensibilidad de sus datos** frente al tiempo que tardaría en existir un CRQC y al tiempo que tomará la propia migración: cuanto más tiempo deba permanecer secreto un dato, antes hay que protegerlo con criptografía post-cuántica, porque el tráfico capturado hoy puede descifrarse después (CISA, NSA y NIST, 2023). Los tres planes siguen los pasos que recomienda ese *factsheet*: establecer una hoja de ruta de preparación cuántica con un equipo de proyecto, preparar un inventario criptográfico con herramientas de descubrimiento, alimentar con él la evaluación de riesgos y conversar con los proveedores sobre sus hojas de ruta, y se alinean con los plazos del NIST: los algoritmos cuánticamente vulnerables quedan en desuso después de 2030 y prohibidos después de 2035 (NIST, 2026).
+La prioridad de migración de cada organización la determina el **horizonte de sensibilidad de sus datos** frente al tiempo que tardaría en existir un CRQC y al tiempo que tomará la propia migración: cuanto más tiempo deba permanecer secreto un dato, antes hay que protegerlo con criptografía post-cuántica, porque el tráfico capturado hoy puede descifrarse después (CISA, NSA y NIST, 2023). Los tres planes siguen los pasos que recomienda ese *factsheet*: establecer una hoja de ruta de preparación cuántica con un equipo de proyecto, preparar un inventario criptográfico con herramientas de descubrimiento, alimentar con él la evaluación de riesgos y conversar con los proveedores sobre sus hojas de ruta, y se alinean con los plazos del NIST: los algoritmos cuánticamente vulnerables quedan en desuso después de 2030 y prohibidos después de 2035 (Moody et al., 2026).
 
 Todos los planes usan la **criptografía híbrida (clásica + post-cuántica en paralelo) como etapa de transición**: el secreto compartido combina el de un esquema clásico con el de ML-KEM, de modo que la sesión sigue protegida si falla cualquiera de los dos. En TLS 1.3 esto es el grupo `X25519MLKEM768` del RFC 10024 (Kwiatkowski et al., 2026). Como conjunto de parámetros por defecto de ML-KEM se usa 768, el que recomienda el NIST (NIST, 2024a).
 
@@ -149,7 +149,7 @@ Todos los planes usan la **criptografía híbrida (clásica + post-cuántica en 
 
 | Riesgo | Mitigación |
 |---|---|
-| Dispositivos médicos y sistemas heredados que no pueden actualizarse | Identificarlos en el inventario, aislarlos en segmentos de red protegidos por una pasarela con criptografía post-cuántica y planificar su reemplazo (NIST, 2026) |
+| Dispositivos médicos y sistemas heredados que no pueden actualizarse | Identificarlos en el inventario, aislarlos en segmentos de red protegidos por una pasarela con criptografía post-cuántica y planificar su reemplazo (Moody et al., 2026) |
 | Datos ya capturados con intercambios clásicos (HNDL ya consumado) | Priorizar la protección del tráfico futuro; considerar la reencriptación de lo que aún no haya salido de la organización |
 | Verificadores externos (farmacias, aseguradoras) sin soporte de ML-DSA | Doble firma durante la transición |
 | Cadenas de certificados más grandes que afecten a la latencia del portal | Medir el efecto (sección 4) y usar certificados con una sola firma post-cuántica en la cadena corta |
@@ -178,7 +178,7 @@ Todos los planes usan la **criptografía híbrida (clásica + post-cuántica en 
 
 **(5) Riesgos y mitigaciones.** Los *middleboxes* y clientes antiguos que no toleren un `ClientHello` de más de 1 KB: pruebas de compatibilidad antes del despliegue y cadena de reversión a X25519 sin ML-KEM para quienes fallen. El aumento de latencia en redes móviles con pérdida de paquetes: medir con datos reales (sección 4). La dependencia del soporte de la CDN y de la autoridad certificadora: elegir proveedores con hoja de ruta publicada.
 
-**Justificación de la prioridad.** El horizonte de 5 a 7 años hace que el riesgo HNDL sea moderado, por eso el plan arranca después del Perfil A, pero el costo de la fase 1 es bajo (configuración) y el beneficio de protección doble es alto. La fase final se alinea con el desuso de 2030 del NIST (NIST, 2026).
+**Justificación de la prioridad.** El horizonte de 5 a 7 años hace que el riesgo HNDL sea moderado, por eso el plan arranca después del Perfil A, pero el costo de la fase 1 es bajo (configuración) y el beneficio de protección doble es alto. La fase final se alinea con el desuso de 2030 del NIST (Moody et al., 2026).
 
 ### 3.3 Perfil C: entidad gubernamental de defensa
 
@@ -238,3 +238,71 @@ La NSA espera que la transición completa de los sistemas de seguridad nacional 
 **Justificación de la prioridad.** El Perfil C combina el **mayor horizonte** con el **adversario más capaz** y con un **mandato regulatorio**, así que es el de plazos más estrictos y menos flexibles: no puede esperar a que la criptografía híbrida madure en el mercado.
 
 **Checkpoint 3.** El plan cubre los tres perfiles con inventario, clasificación por horizonte, estrategia híbrida, un cronograma con más de tres hitos verificables y riesgos con mitigaciones; la prioridad de cada uno se justifica por su horizonte de sensibilidad (A: crítico; C: máximo y mandatorio; B: moderado), con las fuentes del NIST, la NSA y CISA.
+
+## 4. Tamaños de claves y firmas, e impacto en TLS 1.3
+
+El costo principal de la criptografía post-cuántica no es de cómputo sino de **bytes**: claves, *ciphertexts* y firmas son de uno a dos órdenes de magnitud mayores que los de la criptografía de curva elíptica, y en un protocolo como TLS esos bytes viajan en cada *handshake*.
+
+### 4.1 Tabla comparativa de tamaños
+
+| Algoritmo | Tipo | Clave pública | Clave privada | Ciphertext o firma | Fuente |
+|---|---|---|---|---|---|
+| X25519 | Intercambio de claves (clásico) | 32 bytes | 32 bytes | (32 bytes de clave compartida enviada) | Langley et al. (2016) |
+| ECDSA P-256 | Firma (clásico) | 64 bytes | 32 bytes | 64 bytes (72 en DER) | Inventario de la sección 1 |
+| Ed25519 | Firma (clásico) | 32 bytes | 32 bytes | 64 bytes | Josefsson y Liusvaara (2017) |
+| RSA-2048 | Firma o transporte de claves (clásico) | 256 bytes (módulo) | cerca de 256 bytes (exponente privado) | 256 bytes | Cálculo: módulo de 2048 bits |
+| **ML-KEM-512** | KEM post-cuántico | 800 bytes | 1632 bytes | 768 bytes | NIST (2024a) |
+| **ML-KEM-768** | KEM post-cuántico | 1184 bytes | 2400 bytes | 1088 bytes | NIST (2024a) |
+| **ML-KEM-1024** | KEM post-cuántico | 1568 bytes | 3168 bytes | 1568 bytes | NIST (2024a) |
+| **ML-DSA-44** | Firma post-cuántica | 1312 bytes | 2560 bytes | 2420 bytes | NIST (2024b) |
+| **ML-DSA-65** | Firma post-cuántica | 1952 bytes | 4032 bytes | 3309 bytes | NIST (2024b) |
+| **ML-DSA-87** | Firma post-cuántica | 2592 bytes | 4896 bytes | 4627 bytes | NIST (2024b) |
+| **SLH-DSA-128s** | Firma post-cuántica (hash) | 32 bytes | 64 bytes | 7856 bytes | NIST (2024c) |
+| **SLH-DSA-128f** | Firma post-cuántica (hash) | 32 bytes | 64 bytes | 17 088 bytes | NIST (2024c) |
+
+Los tamaños de X25519, Ed25519 y RSA-2048 son valores estándar de esos esquemas; el de la clave privada de RSA es aproximado, porque depende de la representación (con parámetros del teorema chino del resto ocupa más). Los de los estándares post-cuánticos se transcribieron de los FIPS.
+
+**Factores de crecimiento respecto a la criptografía actual.**
+
+| Comparación | Cálculo | Factor |
+|---|---|---|
+| Clave pública ML-KEM-768 frente a X25519 | 1184 / 32 | 37 veces |
+| *Ciphertext* ML-KEM-768 frente a la clave pública X25519 del servidor | 1088 / 32 | 34 veces |
+| Clave pública ML-DSA-65 frente a ECDSA P-256 | 1952 / 64 | 30,5 veces |
+| Firma ML-DSA-65 frente a ECDSA P-256 (DER) | 3309 / 72 | 46 veces |
+| Firma ML-DSA-65 frente a RSA-2048 | 3309 / 256 | 12,9 veces |
+| Firma SLH-DSA-128s frente a ECDSA P-256 (DER) | 7856 / 72 | 109 veces |
+| Clave pública SLH-DSA-128s frente a ECDSA P-256 | 32 / 64 | 0,5 veces (la mitad) |
+
+SLH-DSA es la única opción cuya clave pública es **menor** que la de ECDSA, pero paga con las firmas más grandes de la tabla.
+
+### 4.2 Impacto en un handshake TLS 1.3 con intercambio híbrido X25519 + ML-KEM-768
+
+En TLS 1.3 el intercambio de claves híbrido `X25519MLKEM768` (RFC 10024) concatena la clave de X25519 y la de ML-KEM-768 en la extensión `key_share`: el cliente envía **1216 bytes** (32 de X25519 y 1184 de ML-KEM-768) y el servidor responde con **1120 bytes** (32 y 1088), frente a 32 y 32 bytes de X25519 solo (Kwiatkowski et al., 2026). El `ClientHello` crece, por tanto, en 1184 bytes y el `ServerHello` en 1088 bytes. Con un segmento TCP típico de 1460 bytes, solo la clave compartida del cliente ocupa el 83 % del segmento, así que el resto del mensaje apenas cabe y es probable que se reparta en más de un segmento.
+
+Para dimensionar el efecto total se suman los bytes de material criptográfico de un *handshake* completo con una cadena de dos certificados (hoja e intermedio; la raíz no se envía). Contiene cuatro elementos: la clave compartida del cliente, la del servidor, dos claves públicas (las de los certificados) y tres firmas (la de la hoja, la del intermedio y la de `CertificateVerify`).
+
+| Escenario | Intercambio de claves (cliente + servidor) | Autenticación (2 claves públicas + 3 firmas) | Total | Respecto al clásico |
+|---|---|---|---|---|
+| 1. Clásico: X25519 + ECDSA P-256 | 32 + 32 = 64 | 2·64 + 3·72 = 344 | 408 bytes | 1 vez |
+| 2. Híbrido + ECDSA P-256 (solo KEM migrado) | 1216 + 1120 = 2336 | 344 | 2680 bytes | 6,6 veces |
+| 3. Híbrido + ML-DSA-44 | 2336 | 2·1312 + 3·2420 = 9884 | 12 220 bytes | 30 veces |
+| 4. Híbrido + ML-DSA-65 | 2336 | 2·1952 + 3·3309 = 13 831 | 16 167 bytes | 39,6 veces |
+| 5. Híbrido + SLH-DSA-128s | 2336 | 2·32 + 3·7856 = 23 632 | 25 968 bytes | 63,6 veces |
+
+Estas cifras **solo cuentan el material criptográfico**; el mensaje real es mayor porque incluye nombres, extensiones y otros campos de los certificados X.509 que este análisis no cuantifica, de modo que son cotas inferiores.
+
+**Lectura de la tabla.**
+
+1. **Migrar solo el intercambio de claves cuesta poco** (escenario 2: 2,3 KB adicionales) y es lo que protege contra la amenaza HNDL, porque el secreto de sesión es lo que un adversario captura hoy. Por eso la fase 1 de los perfiles A y B de la sección 3 es TLS híbrido con certificados ECDSA.
+2. **Migrar la autenticación es lo que encarece el *handshake*.** El escenario 4 transmite unos 16 KB, 40 veces más que el clásico, y la firma post-cuántica protege la autenticidad, que solo puede atacarse en el momento de la conexión y no retroactivamente, así que es menos urgente.
+3. **Efecto en la ventana inicial de TCP.** La ventana de congestión inicial habitual es de 10 segmentos, unos 14 600 bytes con segmentos de 1460 (Chu et al., 2013). El vuelo del servidor de cada escenario es la clave compartida de 1120 bytes más su autenticación: en los escenarios 2 y 3 es de 1464 y 11 004 bytes y cabe en la ventana; en el escenario 4 es de 1120 + 13 831 = 14 951 bytes y **la supera** incluso sin contar los campos X.509. El escenario 3, con 11 004 bytes, deja un margen de unos 3,6 KB para esos campos. Cuando el vuelo supera la ventana, el servidor debe esperar un ACK antes de seguir enviando, lo que añade **un viaje de ida y vuelta (RTT)** al *handshake*; en una red móvil con 100 ms de RTT son 100 ms adicionales por conexión nueva. Ese valor es un ejemplo ilustrativo del cálculo, no una medición.
+4. **Mitigaciones.** Reutilizar sesiones (reanudación) para evitar repetir el *handshake* completo; usar cadenas de certificados cortas (una sola autoridad intermedia); considerar ML-DSA-44 en las hojas de menor riesgo; y, a largo plazo, soluciones que reduzcan el tamaño de la cadena de certificados, que el análisis no evalúa por no haber una fuente verificada en esta revisión.
+
+### 4.3 Otros costos por tamaño
+
+- **Almacenamiento y ancho de banda de claves.** Una clave privada de ML-DSA-65 (4032 bytes) es 126 veces mayor que una de ECDSA P-256 (32 bytes) y la pública es unas 30 veces mayor; para una PKI con millones de certificados (como en el Perfil A) esto multiplica el tamaño de los registros, las listas de revocación y las copias de seguridad.
+- **Dispositivos restringidos.** Los dispositivos médicos e IoT con poca memoria y ancho de banda sufren más con firmas de 3 a 8 KB; es el motivo por el que el inventario del Perfil A los identifica aparte.
+- **Firmas de *firmware* y documentos.** Una firma de 3309 bytes es insignificante frente a una imagen de *firmware* de megabytes, así que el costo por tamaño importa sobre todo en protocolos de tiempo real, no en firma de archivos.
+
+**Checkpoint 4.** La sección tabula los tamaños de clave y firma de los algoritmos clásicos y de los tres estándares post-cuánticos, calcula los factores de crecimiento y cuantifica el impacto sobre un *handshake* TLS 1.3 con el intercambio híbrido `X25519MLKEM768` (cliente 1216 bytes, servidor 1120 bytes) y con distintas firmas, incluyendo el efecto sobre la ventana inicial de TCP y las mitigaciones.
