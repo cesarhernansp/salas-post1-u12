@@ -13,7 +13,7 @@ Un computador cuántico criptográficamente relevante (CRQC, por sus siglas en i
 **Diferencias respecto a la guía.** La revisión de las fuentes mostró tres puntos que conviene aclarar desde el principio:
 
 - El NIST IR 8547 ya no es un borrador: se publicó en su versión final el 27 de octubre de 2026, y la guía lo conoce solo por el borrador de noviembre de 2024. Los plazos de transición se citan de la versión final.
-- El esquema de TLS híbrido X25519+ML-KEM-768 ya está estandarizado como **RFC 10024** (Proposed Standard, agosto de 2026), con el nombre de grupo `X25519MLKEM768` (valor IANA 4588); la guía lo menciona como `X25519Kyber768` en despliegue desde 2023-2024.
+- El esquema de TLS híbrido X25519+ML-KEM-768 ya está estandarizado como **RFC 10024** (*Standards Track*, agosto de 2026), con el nombre de grupo `X25519MLKEM768` (valor IANA 4588); la guía lo menciona como `X25519Kyber768` en despliegue desde 2023-2024.
 - El documento "ETSI GR QSC 006" que lista la guía como "Transition Guidelines" no pudo localizarse con ese título, por lo que no se cita.
 
 ## 1. Inventario de algoritmos criptográficos vulnerables

@@ -12,6 +12,7 @@ La Parte 1 implementa y simula circuitos cuánticos con Qiskit sobre el simulado
 salas-post1-u12/
 ├── README.md
 ├── src/          # Parte 1: bell_state.py, deutsch_jozsa.py, grover.py, grover_noise.py
+│                 #          (auxiliar: grover_noise_backend.py)
 ├── capturas/     # histogramas y comparaciones generados por los programas
 └── docs/         # Parte 2: analisis-pqc.md
 ```
@@ -261,3 +262,70 @@ El programa auxiliar `grover_noise_backend.py` transpila el circuito a las puert
 ![Modelo simplificado frente a ruido calibrado](capturas/grover_noise_backend.png)
 
 **Checkpoint 5.** Las dos decisiones técnicas de la Parte 1 (Pasos 5 y 6) están incluidas arriba, cada una con más de 100 palabras. La primera evalúa que el resultado de Grover bajo ruido sigue siendo útil para 2 qubits frente al umbral de tolerancia a fallos y que el error acumulado lo destruiría al escalar. La segunda identifica las limitaciones del modelo despolarizante frente a un modelo T1/T2 calibrado sobre un backend real, con datos medidos.
+
+---
+
+# Parte 2 — Análisis del impacto cuántico en la ciberseguridad
+
+El análisis completo está en [`docs/analisis-pqc.md`](docs/analisis-pqc.md) (unas 7000 palabras, escrito en tercera persona). Cada cifra técnica proviene de documentos primarios: los FIPS 203, 204 y 205 del NIST, el informe NIST IR 8547 en su versión final, el *factsheet* de CISA, NSA y NIST de 2023, el aviso de la NSA sobre CNSA 2.0 (versión 1.0, septiembre de 2022) y el RFC 10024 del IETF. Donde un dato no pudo verificarse en una fuente primaria, el documento lo marca como no verificado.
+
+## Estructura y checkpoints
+
+| Checkpoint | Sección del documento | Contenido |
+|---|---|---|
+| 1 | [1. Inventario de algoritmos vulnerables](docs/analisis-pqc.md#1-inventario-de-algoritmos-criptográficos-vulnerables) | Tabla de 8 algoritmos con su vulnerabilidad a Shor o a Grover, categorías de seguridad del NIST, plazos del IR 8547 y la amenaza de recolectar ahora y descifrar después |
+| 2 | [2. Estándares NIST PQC](docs/analisis-pqc.md#2-estándares-nist-de-criptografía-post-cuántica-agosto-de-2024) | ML-KEM, ML-DSA y SLH-DSA con tamaños transcritos de los FIPS y la correspondencia con los algoritmos que reemplazan |
+| 3 | [3. Plan de migración](docs/analisis-pqc.md#3-plan-de-migración-para-tres-perfiles-organizacionales) | Perfiles A (hospital), B (comercio electrónico) y C (defensa): inventario, clasificación, estrategia híbrida, cronograma con hitos y riesgos |
+| 4 | [4. Tamaños e impacto en TLS 1.3](docs/analisis-pqc.md#4-tamaños-de-claves-y-firmas-e-impacto-en-tls-13) | Tabla de tamaños, factores de crecimiento y costo de un *handshake* híbrido |
+| 5 | [5. Decisiones técnicas](docs/analisis-pqc.md#5-decisiones-técnicas), [6. Conclusiones](docs/analisis-pqc.md#6-conclusiones) y [7. Referencias](docs/analisis-pqc.md#7-referencias) | Dos decisiones de más de 100 palabras, conclusiones y referencias en formato APA |
+
+## Hallazgos principales
+
+- **Shor frente a Grover.** El algoritmo de Shor rompe por completo RSA, ECDH, ECDSA y Diffie-Hellman; el de Grover solo reduce a la mitad los bits efectivos de AES y de las funciones hash, y se compensa con claves de 256 bits.
+- **Plazos del NIST.** Según el IR 8547 final, los algoritmos de clave pública vulnerables quedan en desuso después de 2030 y no permitidos después de 2035.
+- **Prioridad por horizonte de datos.** El hospital (datos de 50 a 75 años) es el perfil más urgente, la entidad de defensa el de plazos más estrictos (CNSA 2.0 de la NSA exige AES-256, SHA-384 o SHA-512, Kyber y Dilithium de nivel V, y LMS o XMSS para firmar software, con uso exclusivo entre 2030 y 2033 según la tecnología) y la startup de comercio electrónico el de menor urgencia pero de bajo costo de migración.
+- **Costo en bytes.** Un *handshake* TLS 1.3 con X25519 y ECDSA P-256 mueve unos 408 bytes de material criptográfico. Con el intercambio híbrido `X25519MLKEM768` y certificados ECDSA son 2680 bytes (6,6 veces), y con firmas ML-DSA-65 son 16 167 bytes (39,6 veces), lo que supera la ventana inicial de TCP de unos 14,6 KB y añade un viaje de ida y vuelta.
+
+| Magnitud | Clásico | Post-cuántico | Factor |
+|---|---|---|---|
+| Clave pública de intercambio | X25519: 32 bytes | ML-KEM-768: 1184 bytes | 37 |
+| Firma | ECDSA P-256: 72 bytes (DER) | ML-DSA-65: 3309 bytes | 46 |
+| Clave pública de firma | ECDSA P-256: 64 bytes | ML-DSA-65: 1952 bytes | 30,5 |
+
+## Decisiones técnicas de la Parte 2
+
+1. **Perfil A, firma de recetas médicas.** Se prescribe ML-DSA-65 con doble firma ECDSA durante la transición y SLH-DSA solo para la raíz de la PKI y el archivo de larga vida, por la diferencia de tamaño (3309 frente a 7856 bytes por firma).
+2. **Perfil B, ¿híbrido permanente?** Se prescribe el híbrido como solución transitoria con revisión en 2030: añade solo 32 bytes por dirección frente a ML-KEM solo, pero la parte clásica no protege frente a un computador cuántico y el NIST declara no permitido el establecimiento de claves clásico después de 2035.
+
+El texto completo de ambas decisiones, con su justificación, está en la [sección 5 del análisis](docs/analisis-pqc.md#5-decisiones-técnicas).
+
+---
+
+# Entregables
+
+| Entregable de la guía | Ubicación |
+|---|---|
+| `bell_state.py`, `deutsch_jozsa.py`, `grover.py`, `grover_noise.py` | [`src/`](src) |
+| Capturas de la Parte 1 (histogramas, comparación con y sin ruido) | [`capturas/`](capturas) (10 imágenes) |
+| Diagramas de circuitos, tablas de resultados e interpretación cuántica | Pasos 1 a 4 de este README |
+| Dos decisiones técnicas de la Parte 1 (más de 100 palabras cada una) | Pasos 5 y 6 de este README |
+| `docs/analisis-pqc.md` con tabla de vulnerabilidad, estándares, plan de migración, tamaños y decisiones | [`docs/analisis-pqc.md`](docs/analisis-pqc.md) |
+| Referencias en APA, con los tres FIPS, una fuente académica reciente y una fuente técnica de implementación | Sección 7 del análisis |
+
+# Desviaciones respecto a la guía
+
+| Punto de la guía | Qué se encontró | Qué se hizo |
+|---|---|---|
+| Oráculo de Grover | El oráculo propuesto intercambia los objetivos `01` y `10` por el orden de bits de Qiskit (el qubit 0 es el de la derecha) | Se corrigió el oráculo y se verificó con los cuatro objetivos, todos con 100 % de éxito en el simulador ideal |
+| Degradación con ruido | La guía anticipa una degradación cercana a 10 puntos | Con p1q = 0,1 % y p2q = 1 % se midieron 2,1 puntos (97,9 % de éxito), y se amplió con un barrido de la tasa de error y un modelo calibrado de `FakeSherbrooke` |
+| Versión de Qiskit | Instalar `qiskit-ibm-runtime` sin fijar versión actualiza Qiskit a la rama 2.x | Se fijó `qiskit<2` y `qiskit-ibm-runtime<0.38` para mantener la rama 1.x que pide la guía |
+| NIST IR 8547 | La guía lo conoce como borrador de 2024 | Se cita la versión final de octubre de 2026 |
+| TLS híbrido | La guía menciona `X25519Kyber768` | Se usa `X25519MLKEM768`, estandarizado en el RFC 10024 |
+| ETSI GR QSC 006 | No se localizó con ese título | No se cita |
+
+# Limitaciones
+
+- Los experimentos de la Parte 1 usan simuladores; ningún resultado proviene de hardware cuántico real. El modelo calibrado usa los datos guardados de `FakeSherbrooke`, no una calibración actual.
+- Los algoritmos y plazos de CNSA 2.0 se verificaron en el aviso de la NSA, versión 1.0 de septiembre de 2022, que nombra los algoritmos como CRYSTALS-Kyber y CRYSTALS-Dilithium de nivel V; su equivalencia con ML-KEM-1024 y ML-DSA-87 es interpretación propia y no se revisaron versiones posteriores del aviso.
+- Los tiempos de ejecución de ML-DSA y SLH-DSA y la existencia de un grupo TLS de ML-KEM sin componente clásico no se verificaron en una fuente primaria y así se indican en el análisis.
+- El cálculo del *handshake* TLS cuenta solo el material criptográfico (claves, *ciphertexts* y firmas), sin los demás campos de los certificados X.509, por lo que son cotas inferiores; el efecto de un viaje de ida y vuelta adicional es un cálculo ilustrativo, no una medición.
