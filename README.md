@@ -36,12 +36,12 @@ Se usa un entorno virtual dentro del proyecto (`.venv`, que no se versiona). Ins
 
 ```
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install "qiskit>=1.0,<2" qiskit-aer matplotlib pylatexenc
+.venv\Scripts\python.exe -m pip install "qiskit>=1.0,<2" qiskit-aer matplotlib pylatexenc "qiskit-ibm-runtime<0.38"
 .venv\Scripts\python.exe -c "import qiskit; print(qiskit.__version__)"
 .venv\Scripts\python.exe src\bell_state.py
 ```
 
-Se fijó `qiskit<2` porque la guía está escrita para la API 1.x; con `pip install qiskit` sin límite se instalaría hoy la serie 2.x. Se exige Python 3.12 porque una línea de la guía (`grover.py`) anida comillas dobles dentro de un f-string, algo válido solo desde esa versión.
+Se fijó `qiskit<2` porque la guía está escrita para la API 1.x; con `pip install qiskit` sin límite se instalaría hoy la serie 2.x. `qiskit-ibm-runtime` solo se necesita para el programa auxiliar `grover_noise_backend.py` (datos de calibración de un backend IBM guardados localmente, sin cuenta); se fija por debajo de la 0.38 porque las versiones nuevas arrastran Qiskit 2.x. Se exige Python 3.12 porque una línea de la guía (`grover.py`) anida comillas dobles dentro de un f-string, algo válido solo desde esa versión.
 
 Los programas calculan la carpeta `capturas/` a partir de su propia ubicación, así que pueden ejecutarse desde cualquier directorio.
 
@@ -228,3 +228,36 @@ La señal decae de forma exponencial con el número de puertas de 2 qubits: con 
 ![Acumulación del error con la profundidad](capturas/grover_noise_profundidad.png)
 
 **Checkpoint 4.** `grover_noise.py` ejecuta sin errores. La probabilidad de éxito sin ruido es 100 % y con ruido es 97.9 %, una degradación medible (2.1 puntos, con una desviación típica entre corridas de 0.5 puntos) y coherente con las tasas configuradas.
+
+## Paso 5 — Decisión técnica: ¿el resultado de Grover con ruido sigue siendo útil o requiere corrección de errores?
+
+<!-- decision-1:inicio -->
+Con el ruido configurado en el Paso 4, el resultado sigue siendo útil sin corrección de errores: |11⟩ obtiene 1002 de 1024 cuentas (97.9 %) frente a 8, 8 y 6 de los otros tres estados, de modo que es con claridad el más probable. Un experimento de 1024 shots lo identifica con confianza estadística, porque el azar daría unas 256 cuentas por estado y 1002 queda a más de 50 desviaciones típicas de ese valor. El teorema del umbral de tolerancia a fallos dice que por debajo de un error físico de alrededor de 1 % por puerta se puede construir un qubit lógico arbitrariamente fiable con redundancia, y por encima agregar qubits empeora el resultado; la tasa de 2 qubits de este modelo (p2q = 1 %) está justo en ese límite. El problema aparece al escalar: el error no se degrada de forma lineal sino que se acumula de forma multiplicativa con la profundidad. En la simulación, 100 puertas CZ seguidas dejan solo un 52 % de señal y 400 la dejan en 26 %, casi el azar (25 %), y coincide con el modelo (1 − p)^m. Un Grover de 10 qubits necesita unas 25 iteraciones; si cada una se descompone en unas 30 puertas de 2 qubits (supuesto), son unas 750 puertas y la señal sobreviviente es 0.99^750 ≈ 5 × 10⁻⁴, indistinguible del ruido. Por eso los circuitos NISQ pequeños y poco profundos, como los de este laboratorio, se pueden ejecutar sobre qubits físicos sin corrección de errores, mientras que los algoritmos con utilidad práctica, como Shor para números grandes o la simulación química de moléculas complejas, requieren qubits lógicos protegidos por códigos de corrección de errores.
+<!-- decision-1:fin -->
+
+## Paso 6 — Decisión técnica: ¿qué tan representativo es el modelo de ruido despolarizante frente al hardware NISQ real?
+
+<!-- decision-2:inicio -->
+El modelo despolarizante aplica el mismo error a cualquier tipo de falla, en cualquier qubit y a cualquier puerta del mismo tamaño. El hardware superconductor real tiene tiempos de relajación T1 (decaimiento de energía) y de decoherencia T2 (pérdida de fase) distintos en cada qubit, y el error depende del tiempo que el qubit espera o ejecuta una puerta: una puerta de 2 qubits dura varias veces más que una de 1 qubit y acumula más decoherencia. Además hay un error de lectura (readout) que un error de puerta no representa. Con los datos de calibración guardados de IBM Sherbrooke (`NoiseModel.from_backend`), el éxito de Grover en pares de qubits acoplados fue de 84.6 % a 96.2 % (media 92.2 %), frente a 98.0 % del modelo simplificado: este subestima el efecto del ruido en unos 6 puntos y no distingue entre pares. El par (7, 8) tiene un error de puerta ECR de 3.78 % y el (6, 7) un T1 de 51 µs, y son los peores; el error de lectura va de 0.5 % a 4.9 %. Aun así, el modelo simplificado sigue siendo razonable para este laboratorio, cuyo objetivo es demostrar de forma controlada y reproducible que el ruido degrada la fidelidad, no predecir un dispositivo concreto; usar un modelo calibrado ataría el experimento a la disponibilidad y a una calibración que cambia. Si el objetivo fuera predecir el comportamiento del circuito en un procesador IBM específico antes de ejecutarlo en hardware, la elección correcta sería `NoiseModel.from_backend()` con la calibración más reciente de ese backend, porque el modelo simplificado sobrestima o subestima de forma sistemática mecanismos de error que no representa.
+<!-- decision-2:fin -->
+
+### Evidencia: modelo calibrado (`src/grover_noise_backend.py`)
+
+El programa auxiliar `grover_noise_backend.py` transpila el circuito a las puertas nativas del hardware (`rz`, `sx`, `x`, `ecr`; en el par (0, 1) resultan 46 `rz`, 20 `sx`, 6 `x` y 2 `ecr`, con profundidad 48, frente a las 2 CZ del modelo simplificado) y lo simula con el ruido calibrado de `FakeSherbrooke` (8192 shots):
+
+| Par de qubits | T1 (µs) | T2 (µs) | Error ECR | Error de lectura | Éxito de \|11⟩ |
+|---|---|---|---|---|---|
+| (0, 1) | 284 / 392 | 220 / 181 | 0.58 % | 0.5 % / 1.7 % | 96.1 % |
+| (1, 2) | 392 / 252 | 181 / 198 | 0.47 % | 1.7 % / 2.0 % | 94.9 % |
+| (2, 3) | 252 / 348 | 198 / 146 | 0.76 % | 2.0 % / 1.1 % | 94.7 % |
+| (3, 4) | 348 / 410 | 146 / 369 | 0.56 % | 1.1 % / 1.1 % | 96.2 % |
+| (4, 5) | 410 / 193 | 369 / 255 | 0.56 % | 1.1 % / 4.9 % | 92.3 % |
+| (5, 6) | 193 / 301 | 255 / 270 | 0.36 % | 4.9 % / 3.7 % | 90.5 % |
+| (6, 7) | 301 / 51 | 270 / 269 | 1.34 % | 3.7 % / 1.1 % | 88.6 % |
+| (7, 8) | 51 / 349 | 269 / 242 | 3.78 % | 1.1 % / 3.9 % | 84.6 % |
+| **Media** | | | | | **92.2 %** (mín. 84.6 %, máx. 96.2 %) |
+| Modelo despolarizante simplificado (p1q = 0.1 %, p2q = 1 %) | | | | | 98.0 % |
+
+![Modelo simplificado frente a ruido calibrado](capturas/grover_noise_backend.png)
+
+**Checkpoint 5.** Las dos decisiones técnicas de la Parte 1 (Pasos 5 y 6) están incluidas arriba, cada una con más de 100 palabras. La primera evalúa que el resultado de Grover bajo ruido sigue siendo útil para 2 qubits frente al umbral de tolerancia a fallos y que el error acumulado lo destruiría al escalar. La segunda identifica las limitaciones del modelo despolarizante frente a un modelo T1/T2 calibrado sobre un backend real, con datos medidos.
