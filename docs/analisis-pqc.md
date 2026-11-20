@@ -306,3 +306,59 @@ Estas cifras **solo cuentan el material criptográfico**; el mensaje real es may
 - **Firmas de *firmware* y documentos.** Una firma de 3309 bytes es insignificante frente a una imagen de *firmware* de megabytes, así que el costo por tamaño importa sobre todo en protocolos de tiempo real, no en firma de archivos.
 
 **Checkpoint 4.** La sección tabula los tamaños de clave y firma de los algoritmos clásicos y de los tres estándares post-cuánticos, calcula los factores de crecimiento y cuantifica el impacto sobre un *handshake* TLS 1.3 con el intercambio híbrido `X25519MLKEM768` (cliente 1216 bytes, servidor 1120 bytes) y con distintas firmas, incluyendo el efecto sobre la ventana inicial de TCP y las mitigaciones.
+
+## 5. Decisiones técnicas
+
+### 5.1 Perfil A: ¿qué algoritmo de firma debe prescribir el análisis para las recetas médicas?
+
+<!-- decision-3:inicio -->
+Para firmar las recetas del hospital se prescribe **ML-DSA-65 como firma principal, acompañada de la firma ECDSA actual durante la transición (doble firma), y SLH-DSA reservado para las claves de la raíz de la infraestructura de clave pública (PKI) y para la evidencia de archivo de larga vida**. Las recetas se emiten en gran volumen y se verifican en la farmacia en el momento de dispensar, de modo que el tamaño de la firma pesa más que en una firma poco frecuente: la de ML-DSA-65 ocupa 3309 bytes, frente a 7856 de SLH-DSA-128s (2,4 veces más) y 17 088 de SLH-DSA-128f (5,2 veces más); por cada millón de recetas son unos 3,3 GB, 7,9 GB y 17,1 GB de firmas (cálculo propio con los tamaños de los FIPS 204 y 205). La razón para no usar SLH-DSA en las recetas, aunque dependa solo de funciones hash y sea el más conservador, es ese costo en bytes, que se paga en cada documento. En cambio, la clave de una autoridad raíz firma muy pocas veces y debe ser creíble durante décadas, de modo que sus 7856 bytes no importan y la diversificación sí: si apareciera un avance de criptoanálisis contra los retículos de los que depende ML-DSA, una raíz basada en hash seguiría siendo válida. La doble firma se justifica porque farmacias y aseguradoras migrarán a ritmos distintos; ECDSA mantiene la verificación mientras ML-DSA protege frente a un CRQC, y se retira cuando los verificadores externos soporten ML-DSA, a más tardar en el desuso de diciembre de 2030 que fija el NIST. Esta recomendación no se apoya en tiempos de ejecución, porque los FIPS no los publican y no se verificó una fuente primaria; se apoya en tamaños, categoría de seguridad (la 3 de ML-DSA-65 coincide con la de ML-KEM-768) y la naturaleza de cada uso.
+<!-- decision-3:fin -->
+
+### 5.2 Perfil B: ¿el esquema híbrido debe ser permanente o solo transitorio?
+
+<!-- decision-4:inicio -->
+Para la startup de comercio electrónico se prescribe el esquema híbrido `X25519MLKEM768` como solución **transitoria con una revisión explícita en 2030, y no como arquitectura permanente**. A favor de mantenerlo mientras dure la transición está su bajo costo: frente a ML-KEM-768 solo, el híbrido añade apenas 32 bytes por dirección (1216 frente a 1184 en el cliente, 1120 frente a 1088 en el servidor, es decir, un 2,7 % y un 2,9 % más), de modo que el tamaño no justifica abandonarlo pronto. Su valor es de seguridad: ML-KEM se estandarizó en 2024, mientras que las curvas elípticas llevan décadas de análisis, y si se descubriera una debilidad clásica en el problema de retículos MLWE, la mitad X25519 seguiría protegiendo la sesión frente a adversarios sin computador cuántico (Kwiatkowski et al., 2026). El horizonte de datos del Perfil B también lo respalda: lo que se cifre en 2027 debe seguir secreto hasta 2034 y el híbrido cubre esa ventana completa. Pero no debe ser permanente: contra un adversario con un CRQC la mitad X25519 no aporta nada y solo añade complejidad de implementación y una dependencia que el NIST va a retirar, pues declara no permitidos los esquemas clásicos de establecimiento de claves después de 2035 (Moody et al., 2026), lo que afecta a cualquier cliente del Perfil B sujeto a esa norma. La regla de salida propuesta es: reevaluar en 2030 y pasar a ML-KEM sin componente clásico solo si no hubo avances de criptoanálisis significativos contra MLWE, los clientes del comercio ya lo soportan y el proveedor ofrece ese grupo en TLS; este análisis no verificó que exista hoy un grupo TLS de ML-KEM solo estandarizado, de modo que esa condición queda abierta.
+<!-- decision-4:fin -->
+
+## 6. Conclusiones
+
+1. **La amenaza es real pero asimétrica.** El algoritmo de Shor rompe por completo RSA, ECDH y ECDSA; el de Grover solo debilita a AES y a las funciones hash, y se compensa con claves de 256 bits. La urgencia no depende de cuándo llegue el CRQC sino de cuánto tiempo deben permanecer secretos los datos (HNDL).
+2. **Los estándares ya existen.** ML-KEM (FIPS 203), ML-DSA (FIPS 204) y SLH-DSA (FIPS 205) cubren el intercambio de claves y la firma, y el RFC 10024 define su uso híbrido en TLS 1.3.
+3. **El costo es de bytes, no de algoritmos nuevos.** Migrar solo el intercambio de claves añade unos 2,3 KB por *handshake*; migrar también la autenticación con ML-DSA-65 lo lleva a unos 16 KB, 40 veces el *handshake* clásico, y puede superar la ventana inicial de TCP.
+4. **El orden de la migración sigue al horizonte de datos.** Primero el establecimiento de claves (protege lo capturado hoy), luego las firmas; el Perfil A es el más urgente, el C el más estricto por mandato y el B el de menor urgencia pero de bajo costo.
+5. **Hay datos que este análisis no pudo verificar.** Los tiempos de ejecución de ML-DSA y SLH-DSA, la existencia de un grupo TLS de ML-KEM sin componente clásico y las versiones del aviso de la NSA posteriores a la 1.0 de septiembre de 2022 quedan marcados como no verificados en la fuente primaria. Los algoritmos y plazos de CNSA 2.0 sí se verificaron en esa versión 1.0.
+
+## 7. Referencias
+
+Chu, J., Dukkipati, N., Cheng, Y., y Mathis, M. (2013). *Increasing TCP's initial window* (RFC 6928). Internet Engineering Task Force. https://doi.org/10.17487/RFC6928
+
+CISA, NSA y NIST. (2023, agosto). *Quantum-readiness: Migration to post-quantum cryptography* [Hoja informativa]. Cybersecurity and Infrastructure Security Agency. https://www.cisa.gov/resources-tools/resources/quantum-readiness-migration-post-quantum-cryptography
+
+Gidney, C. (2025). *How to factor a 2048-bit RSA integer with less than a million noisy qubits* (arXiv:2505.15917). arXiv. https://arxiv.org/abs/2505.15917 *(fuente académica reciente)*
+
+Gidney, C., y Ekerå, M. (2021). How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits. *Quantum, 5*, Artículo 433. https://doi.org/10.22331/q-2021-04-15-433
+
+Grover, L. K. (1996). A fast quantum mechanical algorithm for database search. En *Proceedings of the 28th Annual ACM Symposium on Theory of Computing* (pp. 212-219). ACM. https://doi.org/10.1145/237814.237866
+
+Josefsson, S., y Liusvaara, I. (2017). *Edwards-curve digital signature algorithm (EdDSA)* (RFC 8032). Internet Engineering Task Force. https://doi.org/10.17487/RFC8032
+
+Kwiatkowski, K., Kampanakis, P., Westerbaan, B. E., y Stebila, D. (2026). *Post-quantum traditional (PQ/T) hybrid key agreement mechanisms for TLS 1.3* (RFC 10024). Internet Engineering Task Force. https://www.rfc-editor.org/info/rfc10024 *(fuente técnica de implementación)*
+
+Langley, A., Hamburg, M., y Turner, S. (2016). *Elliptic curves for security* (RFC 7748). Internet Engineering Task Force. https://doi.org/10.17487/RFC7748
+
+Moody, D., Perlner, R., Regenscheid, A., Robinson, A., y Cooper, D. (2026). *Transition to post-quantum cryptography standards* (NIST IR 8547). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.IR.8547
+
+National Institute of Standards and Technology. (2024a). *Module-lattice-based key-encapsulation mechanism standard* (FIPS 203). U.S. Department of Commerce. https://doi.org/10.6028/NIST.FIPS.203
+
+National Institute of Standards and Technology. (2024b). *Module-lattice-based digital signature standard* (FIPS 204). U.S. Department of Commerce. https://doi.org/10.6028/NIST.FIPS.204
+
+National Institute of Standards and Technology. (2024c). *Stateless hash-based digital signature standard* (FIPS 205). U.S. Department of Commerce. https://doi.org/10.6028/NIST.FIPS.205
+
+National Security Agency. (2022a, septiembre). *Announcing the Commercial National Security Algorithm Suite 2.0* (PP-22-1338, versión 1.0) [Aviso de ciberseguridad]. https://media.defense.gov/2022/Sep/07/2003071834/-1/-1/0/CSA_CNSA_2.0_ALGORITHMS_.PDF
+
+National Security Agency. (2022b, 7 de septiembre). *NSA releases future quantum-resistant (QR) algorithm requirements for National Security Systems* [Comunicado de prensa]. https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/3148990/nsa-releases-future-quantum-resistant-qr-algorithm-requirements-for-national-se/
+
+Shor, P. W. (1997). Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer. *SIAM Journal on Computing, 26*(5), 1484-1509. https://doi.org/10.1137/S0097539795293172
+
+**Nota sobre las citas.** El informe NIST IR 8547 se cita en el texto como Moody et al. (2026) y los tres FIPS como NIST (2024a, 2024b, 2024c). Los algoritmos y plazos de CNSA 2.0 provienen del aviso de la NSA (2022a); el comunicado de prensa (2022b) solo se usa para el contexto y para la exigencia de validación de CNSSP 11.
