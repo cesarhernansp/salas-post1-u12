@@ -168,3 +168,63 @@ Geométricamente, el estado inicial forma con el subespacio de los estados no ma
 | ![Grover 00](capturas/grover_00.png) | ![Grover 01](capturas/grover_01.png) |
 | **\|10⟩** | **\|11⟩** |
 | ![Grover 10](capturas/grover_10.png) | ![Grover 11](capturas/grover_11.png) |
+
+## Paso 4 — Grover bajo ruido simulado (`src/grover_noise.py`)
+
+Los tres experimentos anteriores usan un simulador ideal, útil para entender la lógica de los algoritmos pero distinto de un procesador NISQ (*Noisy Intermediate-Scale Quantum*), donde cada puerta introduce un error. `qiskit_aer.noise.NoiseModel` permite inyectar ese error dentro del propio simulador. El modelo del programa añade un **error despolarizante** a cada puerta, con tasas del orden de las publicadas para procesadores superconductores:
+
+| Puertas | Error despolarizante | Valor |
+|---|---|---|
+| 1 qubit (`h`, `x`) | `p1q` | 0.1 % |
+| 2 qubits (`cz`) | `p2q` | 1 % |
+
+`depolarizing_error(p, n)` sustituye el estado de los n qubits por el estado máximamente mezclado con probabilidad p. El circuito es exactamente el de Grover del Paso 3 (se importa `build_grover_circuit` de `grover.py`), con objetivo |11⟩. No se modelan errores de lectura. El simulador usa la semilla 2026 para que los números de este README sean reproducibles.
+
+### Resultados
+
+| Medida | Resultado |
+|---|---|
+| Probabilidad de éxito sin ruido | **100.0 %** (1024 de 1024) |
+| Probabilidad de éxito con ruido (una corrida de 1024 shots) | **97.9 %** (1002 de 1024; los otros estados: \|00⟩ 8, \|01⟩ 8, \|10⟩ 6) |
+| **Degradación** | **2.1 puntos porcentuales** |
+| 30 corridas de 1024 shots con ruido | media 97.9 %, desviación típica 0.5 puntos |
+
+**Diferencia con la guía.** La guía anticipa unos 89.4 % con ruido (una degradación de ~10.6 puntos) y dice que los valores son aproximados. Con las tasas que la propia guía configura (0.1 % y 1 %) el simulador da **97.9 %**, y la cifra se puede explicar a mano: el circuito aplica 10 puertas de 1 qubit y 2 puertas CZ. Cada evento despolarizante de 1 qubit con probabilidad 0.001 reduce el éxito en unos 0.001 × 1/2 y cada evento de 2 qubits con probabilidad 0.01 en unos 0.01 × 3/4, de modo que la pérdida esperada es de 10 × 0.0005 + 2 × 0.0075 = 2.0 puntos, la misma que se mide. Reproducir los ~10 puntos de la guía exigiría una tasa de error de 2 qubits de aproximadamente 5 % (ver el barrido).
+
+![Grover con y sin ruido](capturas/grover_noise_comparison.png)
+
+### Barrido de la tasa de error (8192 shots, p1q = p2q / 10)
+
+| Error por puerta de 2 qubits | Probabilidad de éxito de \|11⟩ |
+|---|---|
+| 0 % | 100.0 % |
+| 0.5 % | 98.9 % |
+| **1 % (guía)** | **98.0 %** |
+| 2 % | 95.8 % |
+| 3 % | 93.7 % |
+| 5 % | 89.9 % |
+| 7.5 % | 85.6 % |
+| 10 % | 81.3 % |
+
+![Éxito frente a la tasa de error](capturas/grover_noise_barrido.png)
+
+### Acumulación del error con la profundidad (p2q = 1 %, 8192 shots)
+
+Para ver cómo se acumula el error en circuitos más profundos se aplican m puertas CZ seguidas sobre |00⟩; un número par de CZ es la identidad, así que sin ruido el estado siempre vuelve a |00⟩. La probabilidad de medir |00⟩ indica cuánta señal sobrevive. El modelo `(1 − p)^m + (1 − (1 − p)^m)/4` supone que cada CZ deja el estado intacto con probabilidad 1 − p y, en caso contrario, lo mezcla por completo (queda 1/4 en |00⟩); coincide con la simulación:
+
+| CZ seguidas | P(00) simulada | P(00) según el modelo |
+|---|---|---|
+| 0 | 100.0 % | 100.0 % |
+| 2 | 98.4 % | 98.5 % |
+| 10 | 92.6 % | 92.8 % |
+| 20 | 86.3 % | 86.3 % |
+| 50 | 70.3 % | 70.4 % |
+| 100 | 52.3 % | 52.5 % |
+| 200 | 34.7 % | 35.0 % |
+| 400 | 26.1 % | 26.3 % |
+
+La señal decae de forma exponencial con el número de puertas de 2 qubits: con 100 CZ ya solo sobrevive la mitad y con 400 el resultado es casi el azar (25 %).
+
+![Acumulación del error con la profundidad](capturas/grover_noise_profundidad.png)
+
+**Checkpoint 4.** `grover_noise.py` ejecuta sin errores. La probabilidad de éxito sin ruido es 100 % y con ruido es 97.9 %, una degradación medible (2.1 puntos, con una desviación típica entre corridas de 0.5 puntos) y coherente con las tasas configuradas.
