@@ -8,7 +8,7 @@
 
 Un computador cuántico criptográficamente relevante (CRQC, por sus siglas en inglés) tendría capacidad para romper los sistemas de clave pública que protegen hoy las comunicaciones, las firmas digitales y la infraestructura de claves (CISA, NSA y NIST, 2023). Este documento analiza ese impacto en cinco pasos: el inventario de algoritmos criptográficos clasificados según su vulnerabilidad al algoritmo de Shor o al de Grover; los tres estándares post-cuánticos que el NIST publicó el 13 de agosto de 2024 (ML-KEM, ML-DSA y SLH-DSA); un plan de migración para tres perfiles de organización con horizontes de sensibilidad de datos muy distintos; la cuantificación del crecimiento en bytes de las claves y firmas post-cuánticas y su efecto en un *handshake* TLS 1.3 híbrido; y dos decisiones técnicas justificadas.
 
-**Criterio de fuentes.** Cada cifra técnica proviene de los documentos primarios que se leyeron para este análisis: los tres FIPS del NIST (FIPS 203, 204 y 205), el informe NIST IR 8547 en su versión final de octubre de 2026, el *factsheet* de CISA, NSA y NIST de 2023 y el RFC 10024 del IETF. Las tablas de tamaños y de parámetros se transcribieron de las tablas oficiales de los FIPS. Donde una afirmación no pudo verificarse en una fuente primaria, el documento lo indica de forma expresa.
+**Criterio de fuentes.** Cada cifra técnica proviene de los documentos primarios que se leyeron para este análisis: los tres FIPS del NIST (FIPS 203, 204 y 205), el informe NIST IR 8547 en su versión final de octubre de 2026, el *factsheet* de CISA, NSA y NIST de 2023, el aviso de la NSA sobre CNSA 2.0 (versión 1.0, septiembre de 2022) y el RFC 10024 del IETF. Las tablas de tamaños y de parámetros se transcribieron de las tablas oficiales de los FIPS. Donde una afirmación no pudo verificarse en una fuente primaria, el documento lo indica de forma expresa.
 
 **Diferencias respecto a la guía.** La revisión de las fuentes mostró tres puntos que conviene aclarar desde el principio:
 
@@ -104,9 +104,137 @@ Fuente: Tabla 2 de NIST (2024c). La clave privada del conjunto de 128 bits ocupa
 | Función | Algoritmo clásico (vulnerable a Shor) | Reemplazo post-cuántico | Estándar |
 |---|---|---|---|
 | Intercambio o encapsulamiento de claves | ECDH, X25519, DH, RSA | **ML-KEM** (768 por defecto) | FIPS 203 |
-| Firma digital de uso general | ECDSA, EdDSA, RSA | **ML-DSA** (65 como punto de partida habitual) | FIPS 204 |
+| Firma digital de uso general | ECDSA, EdDSA, RSA | **ML-DSA** (ML-DSA-65, categoría 3, en este análisis) | FIPS 204 |
 | Firma digital de respaldo o de larga vida | ECDSA, RSA | **SLH-DSA** | FIPS 205 |
 
 ML-KEM **no es un esquema de firma**: solo establece claves. ML-DSA y SLH-DSA son esquemas de firma y no sirven para intercambiar claves. El NIST IR 8547 enumera estos estándares como destino de la transición de los algoritmos del Paso 1 (NIST, 2026).
 
 **Checkpoint 2.** La sección incluye tablas comparativas con el tamaño en bytes de la clave pública, la clave privada, el ciphertext o la firma de los tres estándares, con fuente citada, y explica que ML-KEM reemplaza a ECDH y RSA para el intercambio de claves mientras que ML-DSA y SLH-DSA reemplazan a ECDSA y RSA para las firmas.
+
+## 3. Plan de migración para tres perfiles organizacionales
+
+La prioridad de migración de cada organización la determina el **horizonte de sensibilidad de sus datos** frente al tiempo que tardaría en existir un CRQC y al tiempo que tomará la propia migración: cuanto más tiempo deba permanecer secreto un dato, antes hay que protegerlo con criptografía post-cuántica, porque el tráfico capturado hoy puede descifrarse después (CISA, NSA y NIST, 2023). Los tres planes siguen los pasos que recomienda ese *factsheet*: establecer una hoja de ruta de preparación cuántica con un equipo de proyecto, preparar un inventario criptográfico con herramientas de descubrimiento, alimentar con él la evaluación de riesgos y conversar con los proveedores sobre sus hojas de ruta, y se alinean con los plazos del NIST: los algoritmos cuánticamente vulnerables quedan en desuso después de 2030 y prohibidos después de 2035 (NIST, 2026).
+
+Todos los planes usan la **criptografía híbrida (clásica + post-cuántica en paralelo) como etapa de transición**: el secreto compartido combina el de un esquema clásico con el de ML-KEM, de modo que la sesión sigue protegida si falla cualquiera de los dos. En TLS 1.3 esto es el grupo `X25519MLKEM768` del RFC 10024 (Kwiatkowski et al., 2026). Como conjunto de parámetros por defecto de ML-KEM se usa 768, el que recomienda el NIST (NIST, 2024a).
+
+### 3.1 Perfil A: hospital universitario
+
+**Contexto.** Registros médicos con una sensibilidad de 50 a 75 años, portal de pacientes sobre TLS y firma digital de prescripciones con ECDSA. La amenaza HNDL es **crítica**: lo que un adversario capture hoy podría descifrarse dentro de 10 a 15 años, cuando los datos siguen siendo sensibles.
+
+**(1) Inventario de sistemas con criptografía asimétrica activa.** Portal de pacientes (TLS), certificados de servidor y de cliente, firma de prescripciones, VPN entre sedes y con farmacias y aseguradoras, correo seguro, firma de actualizaciones de dispositivos médicos, servicios de directorio e infraestructura de clave pública (PKI) interna, y los respaldos y archivos cifrados. Se incluye la tecnología operativa (OT) y los dispositivos médicos conectados, que suelen ser los más difíciles de actualizar.
+
+**(2) Clasificación de datos por horizonte de sensibilidad.**
+
+| Dato | Horizonte | Riesgo HNDL | Prioridad |
+|---|---|---|---|
+| Historia clínica (tráfico y archivo) | 50 a 75 años | Crítico | 1 |
+| Resultados de laboratorio e imágenes | 30 a 50 años | Alto | 1 |
+| Prescripciones firmadas | Vigencia legal de la receta; autenticidad, no confidencialidad | Bajo (afecta a la autenticidad) | 2 |
+| Datos administrativos y de facturación | 5 a 10 años | Medio | 3 |
+
+**(3) Estrategia híbrida.** Habilitar `X25519MLKEM768` en el portal y en las VPN, y firmar las prescripciones con **ML-DSA-65** en una etapa de doble firma (ECDSA y ML-DSA) hasta que los verificadores externos soporten solo el esquema nuevo. El cifrado simétrico de los archivos (AES-256) no necesita cambio.
+
+**(4) Cronograma en fases con hitos verificables.**
+
+| Fase | Plazo | Hito verificable |
+|---|---|---|
+| 0. Inventario y hoja de ruta | primer semestre de 2027 | Inventario criptográfico completo con herramientas de descubrimiento, hoja de ruta aprobada y respuestas de los proveedores sobre su plan post-cuántico |
+| 1. TLS híbrido en el portal | segundo semestre de 2027 | El 100 % de los *endpoints* públicos del portal negocia `X25519MLKEM768`, medido en los registros del servidor TLS |
+| 2. Firma de prescripciones | 2028 | PKI interna piloto con ML-DSA-65 y emisión de prescripciones con doble firma; farmacias asociadas verifican ambas |
+| 3. VPN y enlaces externos | 2029 | Todos los túneles entre sedes y con terceros usan establecimiento de claves híbrido o ML-KEM |
+| 4. Fin del uso exclusivo de algoritmos clásicos | diciembre de 2030 | Ningún servicio nuevo usa ECDH/RSA/ECDSA de forma exclusiva (inicio del desuso que fija el NIST) |
+| 5. Retiro de algoritmos vulnerables | 2035 | Los algoritmos clásicos de clave pública se eliminan de todos los sistemas (plazo de prohibición del NIST) |
+
+**(5) Riesgos y mitigaciones.**
+
+| Riesgo | Mitigación |
+|---|---|
+| Dispositivos médicos y sistemas heredados que no pueden actualizarse | Identificarlos en el inventario, aislarlos en segmentos de red protegidos por una pasarela con criptografía post-cuántica y planificar su reemplazo (NIST, 2026) |
+| Datos ya capturados con intercambios clásicos (HNDL ya consumado) | Priorizar la protección del tráfico futuro; considerar la reencriptación de lo que aún no haya salido de la organización |
+| Verificadores externos (farmacias, aseguradoras) sin soporte de ML-DSA | Doble firma durante la transición |
+| Cadenas de certificados más grandes que afecten a la latencia del portal | Medir el efecto (sección 4) y usar certificados con una sola firma post-cuántica en la cadena corta |
+
+**Justificación de la prioridad.** El Perfil A es el de **mayor urgencia**: su horizonte de 50 a 75 años excede por mucho cualquier estimación razonable del tiempo hasta un CRQC, de modo que la confidencialidad del tráfico actual ya está en riesgo. Por eso la fase 1 (el establecimiento de claves) va antes que las firmas.
+
+### 3.2 Perfil B: startup de comercio electrónico
+
+**Contexto.** Transacciones cifradas con AES-256 y TLS 1.3 (X25519 + ECDSA), datos de tarjetas sujetos a PCI-DSS, horizonte de sensibilidad de 5 a 7 años (el ciclo de vida de una tarjeta). La urgencia es menor que en salud, pero ofrecer TLS post-cuántico híbrido a los clientes es un diferenciador competitivo temprano.
+
+**(1) Inventario.** Certificados de servidor y su autoridad certificadora, el *endpoint* TLS (balanceador o CDN), las bibliotecas criptográficas de la aplicación y de los clientes móviles y web, las pasarelas de pago, los servicios en la nube y las claves de firma del código.
+
+**(2) Clasificación por horizonte.** Datos de tarjeta y de cuenta: 5 a 7 años (prioridad alta frente a HNDL, aunque menor que en el Perfil A); datos de navegación y de catálogo: menos de 1 año (prioridad baja).
+
+**(3) Estrategia híbrida.** Habilitar `X25519MLKEM768` en el borde (balanceador o CDN). Es un cambio de configuración, no de código, siempre que el proveedor lo ofrezca. Las firmas del certificado se dejan en ECDSA hasta que las autoridades certificadoras públicas emitan certificados con ML-DSA; no se encontró una fecha verificada para ello.
+
+**(4) Cronograma.**
+
+| Fase | Plazo | Hito verificable |
+|---|---|---|
+| 0. Inventario y consulta a proveedores | primer trimestre de 2027 | Inventario de certificados, bibliotecas y CDN; confirmación escrita de qué proveedores soportan `X25519MLKEM768` |
+| 1. TLS híbrido en el borde | segundo trimestre de 2027 | Porcentaje de conexiones que negocian `X25519MLKEM768` visible en los registros; sin aumento de errores de *handshake* |
+| 2. Clientes y bibliotecas | 2028 | Aplicaciones móviles y SDK actualizados; las pruebas de compatibilidad no muestran fallos con redes y *middleboxes* de los clientes |
+| 3. Firmas post-cuánticas | cuando las autoridades certificadoras públicas lo permitan, y antes de 2030 | Certificado de prueba con ML-DSA validado en un entorno de pruebas |
+| 4. Fin del uso exclusivo de algoritmos clásicos | diciembre de 2030 | Ningún servicio usa solo ECDH/ECDSA (desuso del NIST) |
+
+**(5) Riesgos y mitigaciones.** Los *middleboxes* y clientes antiguos que no toleren un `ClientHello` de más de 1 KB: pruebas de compatibilidad antes del despliegue y cadena de reversión a X25519 sin ML-KEM para quienes fallen. El aumento de latencia en redes móviles con pérdida de paquetes: medir con datos reales (sección 4). La dependencia del soporte de la CDN y de la autoridad certificadora: elegir proveedores con hoja de ruta publicada.
+
+**Justificación de la prioridad.** El horizonte de 5 a 7 años hace que el riesgo HNDL sea moderado, por eso el plan arranca después del Perfil A, pero el costo de la fase 1 es bajo (configuración) y el beneficio de protección doble es alto. La fase final se alinea con el desuso de 2030 del NIST (NIST, 2026).
+
+### 3.3 Perfil C: entidad gubernamental de defensa
+
+**Contexto.** Comunicaciones clasificadas, firma de documentos oficiales (PKI nacional) y VPN entre agencias, con datos de 25 a 50 años de sensibilidad. Es un adversario de nivel estatal y, si se trata de un sistema de seguridad nacional de Estados Unidos, la migración es **mandatoria** según la NSA: el 7 de septiembre de 2022 publicó el *Commercial National Security Algorithm Suite 2.0* (CNSA 2.0), que fija los algoritmos resistentes a la computación cuántica que serán obligatorios en esos sistemas; se basa en las selecciones del NIST y en tanto no se completen los estándares se mantiene la conformidad con CNSA 1.0 (NSA, 2022b). La NSA indica además que los propietarios de estos sistemas no deben desplegar algoritmos resistentes a la computación cuántica en redes de misión hasta que los hayan examinado el NIST y la NIAP, como exige CNSSP-11 (NSA, 2022b).
+
+**Fuente de CNSA 2.0.** Los algoritmos y los plazos de este perfil provienen del aviso de ciberseguridad de la NSA *Announcing the Commercial National Security Algorithm Suite 2.0* (versión 1.0, septiembre de 2022, PP-22-1338), que se leyó completo (NSA, 2022a). Esa versión es anterior a los estándares finales del NIST: nombra los algoritmos como CRYSTALS-Kyber y CRYSTALS-Dilithium, con especificación "por determinar" y parámetros de "nivel V". Este análisis los interpreta como ML-KEM-1024 y ML-DSA-87, los conjuntos de categoría 5 de los FIPS 203 y 204; esa equivalencia es interpretación propia, no una afirmación del aviso. No se revisaron versiones posteriores del aviso, de modo que los plazos podrían haberse actualizado desde 2022. Si la entidad no es estadounidense, se aplican los lineamientos equivalentes de su país con la misma lógica.
+
+**(1) Inventario.** Todas las redes y enlaces de comunicaciones clasificadas, VPN entre agencias, módulos de seguridad de hardware (HSM), la PKI nacional y sus autoridades certificadoras, la firma de *firmware* y software, y los dispositivos criptográficos de campo.
+
+**(2) Clasificación por horizonte.** Datos clasificados de 25 a 50 años (prioridad máxima); documentos oficiales firmados de larga vida (la validez de la firma debe sostenerse); comunicaciones tácticas de corta vida (prioridad menor).
+
+**(3) Estrategia.** Cumplir CNSA 2.0, que según la NSA (2022a) exige:
+
+| Función | Algoritmo de CNSA 2.0 | Parámetros |
+|---|---|---|
+| Cifrado simétrico | AES | Claves de 256 bits para todos los niveles de clasificación |
+| Función hash | SHA-384 o SHA-512 | Todos los niveles de clasificación |
+| Establecimiento de claves | CRYSTALS-Kyber (ML-KEM-1024 en este análisis) | Parámetros de nivel V |
+| Firma digital de uso general | CRYSTALS-Dilithium (ML-DSA-87 en este análisis) | Parámetros de nivel V |
+| Firma de software y *firmware* | LMS o XMSS (NIST SP 800-208) | Todos los parámetros aprobados; se recomienda LMS con SHA-256/192 |
+
+Mientras tanto sigue exigiéndose CNSA 1.0: ECDH y ECDSA con la curva P-384, SHA-384, y RSA o Diffie-Hellman con módulo de al menos 3072 bits (NSA, 2022a). La NSA advierte que CNSA 2.0 dejará en desuso RSA, Diffie-Hellman y la criptografía de curva elíptica cuando se vuelva obligatoria. Las firmas LMS y XMSS exigen cumplir todos los requisitos de NIST SP 800-208, incluida la gestión del estado de las claves y la firma en hardware. Respecto a la criptografía híbrida, el aviso admite que los protocolos o la interoperabilidad pueden permitirla o exigirla, pero precisa que, llegada la fecha, seleccionar solo algoritmos de CNSA 1.0 dejará de estar aprobado (NSA, 2022a). Por eso el plan usa el modo híbrido solo para interoperar con socios que aún no migran. Se empieza por el **establecimiento de claves** y por la **firma de *firmware***, que son los casos con más riesgo retroactivo y más difíciles de reparar en campo.
+
+**(4) Cronograma.** La NSA fija fechas distintas según el tipo de tecnología: "apoyar y preferir" CNSA 2.0 (*support and prefer*) y, más tarde, usarlo de forma exclusiva (NSA, 2022a).
+
+| Tecnología (NSA, 2022a) | Apoyar y preferir CNSA 2.0 | Uso exclusivo de CNSA 2.0 |
+|---|---|---|
+| Firma de software y *firmware* | 2025 | 2030 |
+| Equipos de red tradicionales (VPN, enrutadores) | 2026 | 2030 |
+| Navegadores y servidores web, servicios en la nube | 2025 | 2033 |
+| Sistemas operativos | 2027 | 2033 |
+| Equipos especializados (dispositivos restringidos, PKI de gran tamaño) | 2030 | 2033 |
+| Aplicaciones a medida y equipos heredados | no aplica | actualizar o reemplazar antes de 2033 |
+
+La NSA espera que la transición completa de los sistemas de seguridad nacional termine en 2035, en línea con NSM-10 (NSA, 2022a). Las fechas de 2025 y 2026 de la tabla **ya vencieron**, de modo que la fase 0 del plan debe empezar con un análisis de brechas: si la entidad aún no las cumple, tratarlas como incumplimientos que se corrigen primero. Combinado con los plazos federales del NIST, el cronograma del perfil es:
+
+| Fase | Plazo | Hito verificable |
+|---|---|---|
+| 0. Inventario y análisis de brechas | 2027 | Inventario criptográfico de todos los sistemas de misión, priorizado por horizonte de sensibilidad, y lista de los sistemas que incumplen las fechas ya vencidas de 2025 y 2026 |
+| 1. Validación de productos | 2027 a 2028 | Los productos con ML-KEM y ML-DSA cuentan con la validación NIAP o de la NSA que exige CNSSP 11 antes de entrar en redes de misión; los equipos nuevos cumplen los perfiles de protección de la NIAP y los antiguos en su próxima actualización (NSA, 2022a) |
+| 2. Establecimiento de claves | antes del 31 de diciembre de 2030 | Los sistemas de alto impacto usan ML-KEM para establecer claves (plazo federal de EO 14412 y OMB M-26-15; Moody et al., 2026) |
+| 3. Firma de software y red | 2030 | Firma de software y *firmware* con LMS o XMSS, y VPN y enrutadores, usan CNSA 2.0 de forma exclusiva (NSA, 2022a) |
+| 4. Firmas digitales | antes del 31 de diciembre de 2031 | Los sistemas de alto impacto firman con algoritmos post-cuánticos (plazo federal; Moody et al., 2026) |
+| 5. Navegadores, nube, sistemas operativos y equipos especializados | 2033 | Uso exclusivo de CNSA 2.0; las aplicaciones a medida y los equipos heredados se actualizaron o reemplazaron (NSA, 2022a) |
+| 6. Cierre de la transición | 2035 | Fin del uso de algoritmos vulnerables (objetivo de NSM-10 y prohibición del NIST; NSA, 2022a; Moody et al., 2026) |
+
+**(5) Riesgos y mitigaciones.**
+
+| Riesgo | Mitigación |
+|---|---|
+| Datos de 25 a 50 años expuestos a HNDL de un adversario estatal | Priorizar el establecimiento de claves y eliminar las rutas con criptografía exclusivamente clásica en primer lugar |
+| Dependencia de proveedores sin módulos validados | Exigir en los contratos criptografía post-cuántica integrada, calendarios de actualización (CISA, NSA y NIST, 2023) y validación NIAP o de la NSA, no solo FIPS (NSA, 2022a) |
+| Sistemas que no admiten criptografía post-cuántica | Identificarlos y priorizarlos para su reemplazo o retiro; el equipo heredado que no se renueve requerirá una exención y un plan de cumplimiento (NSA, 2022a; Moody et al., 2026) |
+| Firmas con estado (LMS/XMSS) mal gestionadas | Controles estrictos de gestión del estado de las claves, y firma en hardware como exige NIST SP 800-208 (NSA, 2022a) |
+| Fechas de 2025 y 2026 ya vencidas | Análisis de brechas en la fase 0 y plan de corrección con prioridad sobre el resto |
+
+**Justificación de la prioridad.** El Perfil C combina el **mayor horizonte** con el **adversario más capaz** y con un **mandato regulatorio**, así que es el de plazos más estrictos y menos flexibles: no puede esperar a que la criptografía híbrida madure en el mercado.
+
+**Checkpoint 3.** El plan cubre los tres perfiles con inventario, clasificación por horizonte, estrategia híbrida, un cronograma con más de tres hitos verificables y riesgos con mitigaciones; la prioridad de cada uno se justifica por su horizonte de sensibilidad (A: crítico; C: máximo y mandatorio; B: moderado), con las fuentes del NIST, la NSA y CISA.
